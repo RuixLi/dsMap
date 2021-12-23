@@ -45,9 +45,12 @@ e.g. 10 trials x 12 direction gratings x (4 sec for stimuli + 4 sec for blank) =
 2. HSV pseudocolor maps indicating orientation and direction seletivity of each pixels will be generated
 
 the following is example HSV pseudocolor maps where
-Hue: prefered direction/orientation
-Saturation: gDSI/gOSI
-Value: pixel correlation with its surround neighbors
+
+*Hue*: prefered direction/orientation
+
+*Saturation*: gDSI/gOSI
+
+*Value*: pixel correlation with its surround neighbors
 
 ![map](examples/example_maps.png)
 
