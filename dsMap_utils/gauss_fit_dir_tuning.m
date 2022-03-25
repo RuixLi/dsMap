@@ -16,7 +16,7 @@ function [tcFit,stat] = gauss_fit_dir_tuning(rawCurv,dirList)
 
 % INPUT
 % rawCurv[KxT], response of K neurons to T stimuli with different orientations
-% oriList[Tx1], orientations tested, ranged in [0,180]
+% dirList[Tx1], orientations tested, ranged in [0,180]
 
 % OUTPUT
 % tcFit [Kx360], fited turinng curves at 0 to 359 degree
