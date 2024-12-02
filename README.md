@@ -1,15 +1,13 @@
 # dsMap: direction/orientation selectivity mapping
 
-this package includes MATLAB functions to analysis direction/orientation selectivity from wide-field and two-photon calcium imaging data, recorded in classic experiments during which stimuli with specific directions/orientations were presented to the aniaml.
+This package includes MATLAB functions to analysis direction/orientation selectivity from wide-field and two-photon calcium imaging data, recorded in classic experiments during which stimuli with specific directions/orientations were presented to the aniaml.
 
 David Hubel and Torsten Wiesel shared the 1981 Nobel Prize in Physiology or Medicine by finding neurons in the primary visual cortex of mammals have orientation/direction selectivity.
 
 ## How to use
 
-1. Add the folder and subfolder to MATLAB path
-2. Run function `getOriMap` to obtain pixel-wise HSV pseudocolor maps
-3. Run function `getOriStat` to obtain tuning statistics of each neuron
-4. Results will be store in a new folder beside the configuration file
+1. Add the folder to MATLAB path
+2. Check the scripts for examples
 
 ## Experiment protocol
 
@@ -21,24 +19,7 @@ David Hubel and Torsten Wiesel shared the 1981 Nobel Prize in Physiology or Medi
 
 e.g. 10 trials x 12 direction gratings x (4 sec for stimuli + 4 sec for blank) = 960 sec = 16 minutes of imaging data.
 
----
-
-## function `getOriMap`
-
-### Input
-
-`dataDir`: a string of data directory. MATLAB `.mat` file, binary `.bin` file and THORLABS `.raw` file are supported
-
-`cnfigDir` a string of experiment configurations `.mat` file which must has the following fields:
-
-* `config.animalID`, a string of animal ID
-* `config.TTStamp`, a string of time stamp
-* `config.dirList`, a list of stimuli direction, usually 12 directions
-* `config.trialList`, a ordered list of stimuli directions in experiment
-* `config.trialNum`, how many trials of experiment
-* `config.onOffFrames`, [ON OFF] frame number per stimulus
-
-### Outputs
+### `get_map` outputs
 
 1. Pixel statistics across the time dimension of the data are computed, maps and histograms will be generated for visualization
 
@@ -50,21 +31,11 @@ the following is example HSV pseudocolor maps where
 
 *Saturation*: gDSI/gOSI
 
-*Value*: pixel correlation with its surround neighbors
+*Value*: some pixel statistics, the following ones use pixel correlation with its surround neighbors
 
 ![map](examples/example_maps.png)
 
-## `getOriStat`
-
-### Input
-
-`dataDir` is the same as in `getOriMap`
-
-`fpDir` a dirctory string to a `.mat` file where **neuron footprint** is stored.**neuron footprint** is a matrix, each column of the matrix contains binary pixel location of a neuron.
-
-`cnfigDir` is the same as in `getOriMap`
-
-### Output
+### `get_stat` output
 
 1. Time series of each neruon will be extracted and averaged across trial
 
@@ -78,6 +49,20 @@ the following is example tuning curve maps where red line is fitted curve
 
 ![stat](examples/example_stats.png)
 
+## TODO
+
+add statistical test for significance
+
 ## Methodology
 
 Refer [this paper](https://www.frontiersin.org/articles/10.3389/fncir.2014.00092/full) for detailed method
+
+## Updates 2024-12-02
+
+- make the code a matlab package to avoid name conflicts
+
+- get rid of config file use the script to set parameters
+
+- add additional visualization functions
+
+- you can choose different ways to normalize imaging data and calculate response

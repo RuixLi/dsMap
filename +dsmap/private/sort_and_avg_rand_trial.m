@@ -34,21 +34,21 @@ function [Avg,trialType,trialIndL,trialIndS] = sort_and_avg_rand_trial(data, tri
 dataType = class(data);
 trialType = str2double(categories(categorical(trialList)));
 trialTypeNum = length(trialType);
-fprintf('find %d types of trial from the sequence list\n', trialTypeNum)
-fprintf('check data completeness ...\n')
+%fprintf('find %d types of trial from the sequence list\n', trialTypeNum)
+%fprintf('check data completeness ...\n')
 
 ndFlg = 0;
 
 if ismatrix(data)
     dataLength = size(data,1);
-    fprintf('assume 1st dim contains different trials\n')
+    %fprintf('assume 1st dim contains different trials\n')
     K = size(data,2);
     ndFlg = 2;
 end
 
 if ndims(data) == 3
     dataLength = size(data,3);
-    fprintf('assume 3st dim contains different trials\n')
+    %fprintf('assume 3st dim contains different trials\n')
     ndFlg = 3;
 end
 
@@ -80,7 +80,7 @@ end
 trialIndS = logical(trialIndS);
 trialIndL = logical(trialIndL);
 
-disp('average trials ...')
+%disp('average trials ...')
 
 if ndFlg == 2
     data = reshape(data',K,trialLength,[]);

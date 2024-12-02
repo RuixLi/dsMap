@@ -1,4 +1,4 @@
-function getOriMap(dataDir,cnfgDir)
+function DSresult = get_map(ops)
 % get HSV pseudocolor code direction and orientation selectivity map
 
 % for every pixel in the data
@@ -8,73 +8,59 @@ function getOriMap(dataDir,cnfgDir)
 % refer to M. Mazurek, et al. 2014 for more details
 
 % INPUT
-% dataDir[string] directory of data
-% - data type supported:
-% MATLAB .mat file, binary .bin file and THORLABS .raw file
-
+%
 % cnfgDir directory of config
-% - config must have the following fields:
-% config.animalID, animal ID
-% config.TTStamp, a string of time stamp
-% config.dirList, a list of stimuli direction, usually 12 directions
-% config.trialList, a ordered list of stimuli directions in experiment
-% config.trialNum, how many trials of experiment
-% config.onOffFrames, [ON OFF] frame number per stimulus
+% - ops must have the following fields:
+% ops.full_path, full path to the data
+% ops.data_dir, directory of data
+% ops.save_dir, directory to save results
+% ops.file_type, ext of data file
+% ops.dir_list, a list of directions of drifting gratings, usually 12 directions
+% ops.trial_list, a ordered list of stimuli directions in experiment
+% ops.trial_num, how many trials of experiment
+% ops.ON_OFF_frames, [ON OFF] frame number per stimulus
+% ops.smf, spatial smooth sigma
+% ops.ON_idx, index of frames treated as stim ON
+% ops.OFF_idx, index of frames treated as stim OFF or baseline
 
 % written by Ruix.Li in Jun, 2021
 
-%% set some parameters
-smf = 0.2; % spatial smooth sigma
-onIndx = 2:4; % index of frames treated as stim ON
-offIndx = 6:8; % index of frames treated as stim OFF or baseline
-
-%% load data and configurations
-if nargin < 2
-    % select data and config by user
-    [dataName,dataPath] = uigetfile('*.*','select a data file ...');
-    if dataName == 0; return; end
-    pause(.3)
-    
-    % select config log by user
-    [configName,configPath] = uigetfile('*.mat','select config file ...');
-    if configName == 0; return; end
-    dataDir = fullfile(dataPath, dataName);
-    cnfgDir = fullfile(configPath, configName);
-end
-
-% check whether data and config matches before load data
-disp('load data ...')
-cnfg = load(cnfgDir);
-DTstamp = cnfg.TTStamp;
-%DTstamp = cnfg.dateTimeStamp;
-animalID = cnfg.animalID;
-session = cnfg.sessionName;
-%session = cnfg.exprimentName;
-
 % using cartesian coordinates, where 0 deg is north and increase ccw
 % the grating deg in psychopy increases cw, so add minus sign
-dirList = wrapTo360(-cnfg.dirList);
-trialList = wrapTo360(-cnfg.trialList);
-trialNum = cnfg.trialNum;
-onOffFrames = cnfg.onOffFrames;
-saveDir = fileparts(cnfgDir);
+ops.t0 = tic;
+dataDir = ops.full_path;
+saveDir = ops.save_dir;
+dirList = wrapTo360(-ops.dir_list);
+trialList = wrapTo360(-ops.trial_list);
+trialNum = ops.trial_num;
+onOffFrames = ops.ON_OFF_frames;
+trialLength = sum(onOffFrames);
+expectT = trialNum * length(dirList) * trialLength;
 
-expectT = trialNum * length(dirList) * (onOffFrames(1) + onOffFrames(2));
-
-[~, ~, ext] = fileparts(dataDir);
-
-switch ext
-    case '.mat'
-        info = read_mat_info(dataDir);
-    case '.raw'
-        info = read_bin_info(dataDir);
-    case '.bin'
-        info = read_bin_info(dataDir);
+% read data size if not provided, this could be slow
+if any([isempty(ops.d1), isempty(ops.d2), isempty(ops.Loops)]) && ~isempty(ops.file_type)
+    fprintf('getting data info ...')
+    switch ops.file_type
+        case 'mat'
+            info = read_mat_info(dataDir);
+        case 'raw'
+            info = read_bin_info(dataDir, [ops.d1, ops.d2]);
+        case 'bin'
+            info = read_bin_info(dataDir, [ops.d1, ops.d2]);
+        case 'tif'
+            info = read_tif_info(dataDir);
+        case 'tiff'
+            info = read_tif_info(dataDir);
+        case 'nd2'
+            info = read_nd2_info(dataDir);
+    end
+    
+    if expectT ~= info.Loops; error('data length not match, check parameters are correct'); end
+    fprintf('done\n')
 end
 
-if expectT ~= info.Loops; error('data and configration not match'); end
-
-switch ext
+fprintf('loading data ...')
+switch ops.file_type
     case '.mat'
         data = load(dataDir);
         stack = data.stack;
@@ -82,16 +68,25 @@ switch ext
         stack = load_bin_data(dataDir);
     case '.raw'
         stack = load_raw_data(dataDir);
+    case '.tif'
+        stack = load_tif_data(dataDir);
+    case '.tiff'
+        stack = load_tif_data(dataDir);
+    case '.nd2'
+        stack = load_nd2_data(dataDir);
 end
 
 %% normalize and average stack over trial
 stack = single(stack);
-stack = stack - min(stack(:)) + 1;
-[d1,d2,~] = size(stack);
+% stack = stack - min(stack(:)) + 1;
+[d1,d2,Loops] = size(stack);
+fprintf(' %d frames loaded\n',Loops)
+
+assert(Loops == ops.Loops, 'data length not match, check parameters are correct');
 nDir = length(dirList);
-trialLength = sum(onOffFrames);
 
 % calculate some statistic maps
+disp('computing pixel statistics ...')
 fovMap = median(stack,3);
 maxMap = max_val_map(stack);
 skewMap = skew_val_map(stack);
@@ -99,6 +94,8 @@ sdMap = sd_val_map(stack) + 1;
 zMap = z_val_map(stack);
 ccMap = double(corr_val_map(stack,8,1)); % per-normalize
 
+% trail average data
+disp('trial averaging data ...')
 [avg,dirType] = sort_and_avg_rand_trial(stack,trialLength,trialList);
 dirList = double(sort(dirList,'ascend'));
 if ~isequal(dirType, dirList')
@@ -109,26 +106,22 @@ end
 avgcat = reshape(avg,d1,d2,[]);
 nFr = size(avgcat,3);
 
-%% compute Z drifts in each direction
-enhancer1 = imgaussfilt(skewMap,smf);
-enhancer2 = imgaussfilt(ccMap,smf);
+%% compute response in each direction
+enhancer1 = imgaussfilt(sdMap,ops.smf);
+enhancer2 = imgaussfilt(ccMap,ops.smf);
 
-disp('compute directional responses ...')
+disp('compute directional responses for all pixels ...')
 
 dirMap = zeros(d1,d2,nDir);
 dirMapE = zeros(d1,d2,nDir);
 dirMapE2 = zeros(d1,d2,nDir);
 
 for iD = 1:length(dirList)
-    dirA = avg(:,:,:,iD);
-    dirZ = dirA./sdMap;
-
-    dirOn = max(dirZ(:,:,onIndx),[],3);
-    dirOff = median(dirZ(:,:,offIndx),3);
-   
-    dirResp = imgaussfilt(dirOn-dirOff,smf);
-    dirResp(dirResp<0) = 0.00001;
-
+    dirA = avg(:,:,:,iD); % averaged amplitude of direction iD
+    
+    dirResp = calculate_response(dirA, ops);
+    dirResp = imgaussfilt(dirResp,ops.smf);
+    
     dirMap(:,:,iD) = dirResp;
     dirMapE(:,:,iD) = dirResp.*enhancer1;
     dirMapE2(:,:,iD) = dirResp.*enhancer2;
@@ -137,7 +130,7 @@ end
 %% compute response in each orientation
 % assume dirList has paired directions of the same orientation
 % orientational response is the MIN response within the 2 directions
-disp('compute orientational responses ...')
+disp('compute orientational responses for all pixels ...')
 
 nOri = nDir/2;
 
@@ -152,7 +145,7 @@ for iD = 1:nOri
 end
 
 %% estimate direction and orientation tunning
-disp('estimate directional tunning ...')
+disp('estimate directional tunning for all pixels ...')
 
 oriList = dir_to_ori(dirList);
 oriList = oriList(1:nOri);
@@ -174,7 +167,7 @@ oriRspVector = oriMat*oriPolarVector;
 dirPrefAngle = wrapTo360(rad2deg(atan2(dirRspVector(:,2),dirRspVector(:,1))));
 oriPrefAngle = wrapTo360(rad2deg(atan2(oriRspVector(:,2),oriRspVector(:,1))))/2;
 
-% polar vector magnitude 
+% polar vector magnitude
 dirVectorNorm = sqrt(dirRspVector(:,1).^2 + dirRspVector(:,2).^2);
 oriVectorNorm = sqrt(oriRspVector(:,1).^2 + oriRspVector(:,2).^2);
 
@@ -186,41 +179,44 @@ oriTune = oriVectorNorm./sum(oriMat,2);
 dirAngleHue = hue_KO2HSV(dirPrefAngle/360);
 oriAngleHue = hue_KO2HSV(oriPrefAngle/180);
 
-dirTuneSat = rescale_map(dirTune,'n');
-oriTuneSat = rescale_map(oriTune,'n');
-dirTuneSat = rescale_map(dirTuneSat,[0.4,1]);
-oriTuneSat = rescale_map(oriTuneSat,[0.4,1]);
+if ops.rescale_tune
+    dirTuneSat = rescale_map(dirTune,[0.4,1]);
+    oriTuneSat = rescale_map(oriTune,[0.4,1]);
+else
+    dirTuneSat = dirTune;
+    oriTuneSat = oriTune;
+end
 
 % HSV1: Hue = angle, Sat = dirPolarTune, Val = meanValue
-meanVal = rescale_map(fovMap(:),'n');
+meanVal = rescale_map(fovMap(:));
 dirHSV1 = cat(2, dirAngleHue, dirTuneSat, meanVal);
 oriHSV1 = cat(2, oriAngleHue, oriTuneSat, meanVal);
 dirHSVMap1 = hsv2rgb(reshape(dirHSV1, d1, d2, 3));
 oriHSVMap1 = hsv2rgb(reshape(oriHSV1, d1, d2, 3));
 
 % HSV2: H = angle, S = dirPolarTune, V = maxValue
-maxVal = rescale_map(maxMap(:),'n');
+maxVal = rescale_map(maxMap(:));
 dirHSV2 = cat(2, dirAngleHue, dirTuneSat, maxVal);
 oriHSV2 = cat(2, oriAngleHue, oriTuneSat, maxVal);
 dirHSVMap2 = hsv2rgb(reshape(dirHSV2, d1, d2, 3));
 oriHSVMap2 = hsv2rgb(reshape(oriHSV2, d1, d2, 3));
 
 % HSV3: H = angle, S = dirPolarTune, V = skewness
-skewVal = rescale_map(skewMap(:),'n');
+skewVal = rescale_map(skewMap(:));
 dirHSV3 = cat(2, dirAngleHue, dirTuneSat, skewVal);
 oriHSV3 = cat(2, oriAngleHue, oriTuneSat, skewVal);
 dirHSVMap3 = hsv2rgb(reshape(dirHSV3, d1, d2, 3));
 oriHSVMap3 = hsv2rgb(reshape(oriHSV3, d1, d2, 3));
 
 % HSV4: H = angle, S = dirPolarTune, V = stdMap
-sdVal = rescale_map(sdMap(:),'n');
+sdVal = rescale_map(sdMap(:));
 dirHSV4 = cat(2, dirAngleHue, dirTuneSat, sdVal);
 oriHSV4 = cat(2, oriAngleHue, oriTuneSat, sdVal);
 dirHSVMap4 = hsv2rgb(reshape(dirHSV4, d1, d2, 3));
 oriHSVMap4 = hsv2rgb(reshape(oriHSV4, d1, d2, 3));
 
 % HSV5: H = angle, S = dirPolarTune, V = ccMap
-ccVal = ccMap(:);
+ccVal = rescale_map(ccMap(:));
 dirHSV5 = cat(2, dirAngleHue, dirTuneSat, ccVal);
 oriHSV5 = cat(2, oriAngleHue, oriTuneSat, ccVal);
 dirHSVMap5 = hsv2rgb(reshape(dirHSV5, d1, d2, 3));
@@ -230,28 +226,28 @@ oriHSVMap5 = hsv2rgb(reshape(oriHSV5, d1, d2, 3));
 s = ones(size(dirTune));
 
 % HV1: H = angle, S = 1, V = meanValue
-meanVal = rescale_map(fovMap(:),'n');
+meanVal = rescale_map(fovMap(:));
 dirHV1 = cat(2, dirAngleHue, s, meanVal);
 oriHV1 = cat(2, oriAngleHue, s, meanVal);
 dirHVMap1 = hsv2rgb(reshape(dirHV1, d1, d2, 3));
 oriHVMap1 = hsv2rgb(reshape(oriHV1, d1, d2, 3));
 
 % HV2: H = angle, S = 1, V = maxValue
-maxVal = rescale_map(maxMap(:),'n');
+maxVal = rescale_map(maxMap(:));
 dirHV2 = cat(2, dirAngleHue, s, maxVal);
 oriHV2 = cat(2, oriAngleHue, s, maxVal);
 dirHVMap2 = hsv2rgb(reshape(dirHV2, d1, d2, 3));
 oriHVMap2 = hsv2rgb(reshape(oriHV2, d1, d2, 3));
 
 % HV3: H = angle, S = 1, V = skewness
-skewVal = rescale_map(skewMap(:),'n');
+skewVal = rescale_map(skewMap(:));
 dirHV3 = cat(2, dirAngleHue, s, skewVal);
 oriHV3 = cat(2, oriAngleHue, s, skewVal);
 dirHVMap3 = hsv2rgb(reshape(dirHV3, d1, d2, 3));
 oriHVMap3 = hsv2rgb(reshape(oriHV3, d1, d2, 3));
 
 % HV4: H = angle, S = 1, V = stdMap
-sdVal = rescale_map(sdMap(:),'n');
+sdVal = rescale_map(sdMap(:));
 dirHV4 = cat(2, dirAngleHue, s, sdVal);
 oriHV4 = cat(2, oriAngleHue, s, sdVal);
 dirHVMap4 = hsv2rgb(reshape(dirHV4, d1, d2, 3));
@@ -278,13 +274,12 @@ dirZTuneMap = reshape(dirTune,d1,d2);
 oriZTuneMap = reshape(oriTune,d1,d2);
 oriList = oriList/2;
 
-%% plot figures 
-saveDir = fullfile(saveDir,['dsMap-' session '-' DTstamp]);
-mkdir(saveDir);
+%% plot figures
+%mkdir(saveDir);
 disp('saving files ...')
 imwrite(rescale_map(fovMap),fullfile(saveDir,'01_FOV.tif'));
 
-fH = figure('Position',[300,100,600,600]); set(fH, 'color', 'w')
+fH = figure('Position',[300,100,600,600]); set(fH, 'color', 'w', 'visible', 'off');
 im_view(maxMap)
 export_fig(fH, fullfile(fullfile(saveDir,'02_maxValueMap.tif')))
 
@@ -309,35 +304,40 @@ export_fig(fH, fullfile(fullfile(saveDir,'38_oriTune_gOSI.tif')))
 set(gcf,'Position',[300,100,900,300]);
 Ma = im_T(avgcat);
 plot(mean(Ma,2),'LineWidth',2,'Color','k')
-plot_stim(0:trialLength:nFr,onOffFrames(1))
+plot_stim(ops.ON_idx(1):trialLength:nFr,ops.ON_idx(end)-ops.ON_idx(1),[0.95,0.71,0.71])
+plot_stim(ops.OFF_idx(1):trialLength:nFr,ops.OFF_idx(end)-ops.OFF_idx(1),[0.8,0.8,0.8])
 xlim([0,size(Ma,1)])
 ylabel('all pixel timecourse')
 set(gca,'XTick',0:trialLength:nFr)
 export_fig(fH, fullfile(fullfile(saveDir,'07_all_pixel_timecourse.tif')))
 
 plot(mean(Ma(:,ccMap>0.2),2),'LineWidth',2,'Color','k')
-plot_stim(0:trialLength:nFr,onOffFrames(1))
+plot_stim(ops.ON_idx(1):trialLength:nFr,ops.ON_idx(end)-ops.ON_idx(1),[0.95,0.71,0.71])
+plot_stim(ops.OFF_idx(1):trialLength:nFr,ops.OFF_idx(end)-ops.OFF_idx(1),[0.8,0.8,0.8])
 xlim([0,size(Ma,1)])
 ylabel('pixel high Corr')
 set(gca,'XTick',0:trialLength:nFr)
 export_fig(fH, fullfile(fullfile(saveDir,'07_highCorr_pixel_timecourse.tif')))
 
 plot(mean(Ma(:,sdMap>median(sdMap(:))),2),'LineWidth',2,'Color','k')
-plot_stim(0:trialLength:nFr,onOffFrames(1))
+plot_stim(ops.ON_idx(1):trialLength:nFr,ops.ON_idx(end)-ops.ON_idx(1),[0.95,0.71,0.71])
+plot_stim(ops.OFF_idx(1):trialLength:nFr,ops.OFF_idx(end)-ops.OFF_idx(1),[0.8,0.8,0.8])
 xlim([0,size(Ma,1)])
 ylabel('pixel high SD')
 set(gca,'XTick',0:trialLength:nFr)
 export_fig(fH, fullfile(fullfile(saveDir,'07_highSD_pixel_timecourse.tif')))
 
 plot(mean(Ma(:,skewMap>1),2),'LineWidth',2,'Color','k')
-plot_stim(0:trialLength:nFr,onOffFrames(1))
+plot_stim(ops.ON_idx(1):trialLength:nFr,ops.ON_idx(end)-ops.ON_idx(1),[0.95,0.71,0.71])
+plot_stim(ops.OFF_idx(1):trialLength:nFr,ops.OFF_idx(end)-ops.OFF_idx(1),[0.8,0.8,0.8])
 xlim([0,size(Ma,1)])
 ylabel('pixel high skewness')
 set(gca,'XTick',0:trialLength:nFr)
 export_fig(fH, fullfile(fullfile(saveDir,'07_highSkewness_pixel_timecourse.tif')))
 
 plot(mean(Ma(:,zMap>1),2),'LineWidth',2,'Color','k')
-plot_stim(0:trialLength:nFr,onOffFrames(1))
+plot_stim(ops.ON_idx(1):trialLength:nFr,ops.ON_idx(end)-ops.ON_idx(1),[0.95,0.71,0.71])
+plot_stim(ops.OFF_idx(1):trialLength:nFr,ops.OFF_idx(end)-ops.OFF_idx(1),[0.8,0.8,0.8])
 xlim([0,size(Ma,1)])
 ylabel('pixel high zscore')
 set(gca,'XTick',0:trialLength:nFr)
@@ -352,9 +352,9 @@ histogram(skewMap(:),'EdgeAlpha',0,'FaceColor','k')
 title('pixel skewness')
 export_fig(fH, fullfile(fullfile(saveDir,'12_hist_skewness.tif')))
 
-histogram(dirMap(dirMap~=0),'EdgeAlpha',0,'FaceColor','k')
+histogram(zMap(:),'EdgeAlpha',0,'FaceColor','k')
 title('pixel Zscore')
-export_fig(fH, fullfile(fullfile(saveDir,'14_hist_Zdrift.tif')))
+export_fig(fH, fullfile(fullfile(saveDir,'14_hist_Zscore.tif')))
 
 polarhistogram(deg2rad(dirPrefAngle(:)),8*nDir,'EdgeAlpha',0,'FaceColor','k')
 title('pixel polar dir')
@@ -471,37 +471,26 @@ imwrite(oriAngleZMap,fullfile(saveDir,'36_prefOriMap.tif'));
 generate_color_wheel(nDir,saveDir)
 
 %% save data
-dsData.animalID = animalID;
-dsData.DTStamp = DTstamp;
-dsData.trialNum = trialNum;
-dsData.trialList = trialList;
-dsData.dirList = dirList;
-dsData.oriList = oriList;
-dsData.savDir = saveDir;
-dsData.dataDir = dataDir;
-dsData.configDir = cnfgDir;
-dsData.avg = single(avg);
-dsData.dirList = dirList;
-dsData.FOV = fovMap;
-dsData.maxValueMap = maxMap;
-dsData.stdMap = sdMap;
-dsData.skewMap = skewMap;
-dsData.ccMap = ccMap;
-dsData.onIdx = onIndx;
-dsData.offIdx = offIndx;
+DSresult.ops = ops;
 
-dsData.dirRespMap = dirMap;
-dsData.oriRespMap = oriMap;
+DSresult.trialAvgData = avg;
+DSresult.FOV = fovMap;
+DSresult.maxValueMap = maxMap;
+DSresult.stdMap = sdMap;
+DSresult.skewMap = skewMap;
+DSresult.ccMap = ccMap;
 
-dsData.dirRspVector = dirRspVector;
-dsData.oriRspVector = oriRspVector;
+DSresult.dirRespMap = dirMap;
+DSresult.oriRespMap = oriMap;
 
-dsData.dirPrefAngle = dirPrefAngle;
-dsData.dirTune = dirTune;
+DSresult.dirRspVector = dirRspVector;
+DSresult.oriRspVector = oriRspVector;
 
-dsData.oriPrefAngle = oriPrefAngle;
-dsData.oriTune = oriTune;
+DSresult.dirPrefAngle = dirPrefAngle;
+DSresult.dirTune = dirTune;
 
-save(fullfile(saveDir,['dsData-' animalID '-' DTstamp '.mat']), '-struct', 'dsData')
+DSresult.oriPrefAngle = oriPrefAngle;
+DSresult.oriTune = oriTune;
 
+fprintf('finished in %.2f s\n',toc(ops.t0))
 end

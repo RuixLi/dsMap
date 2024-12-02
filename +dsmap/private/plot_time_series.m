@@ -1,4 +1,4 @@
-function imH = plot_time_series(TSs,labels,ops)
+function imH = plot_time_series(TSs,labels,ticks,ops)
 % compactly plot time series
 
 % INPUT
@@ -17,7 +17,7 @@ defaultOps.normFlg = 0;
 defaultOps.cm = lines(16);
 defaultOps.spaceBetweenTraces = 3;
 defaultOps.lineWidth = 1;
-defaultOps.YTickL = [];
+defaultOps.YTickL = arrayfun(@num2str, ticks, 'UniformOutput', 0);
 defaultOps.fontSize = 11;
 
 if nargin < 4; ops = defaultOps; end
@@ -27,8 +27,6 @@ if ~isfield(ops,'spaceBetweenTraces'); ops.spaceBetweenTraces = defaultOps.space
 if ~isfield(ops,'lineWidth'); ops.lineWidth = defaultOps.lineWidth; end
 if ~isfield(ops,'YTickL'); ops.YTickL = defaultOps.YTickL; end
 if ~isfield(ops,'fontSize'); ops.fontSize = defaultOps.fontSize; end
-
-if nargin < 3 || isempty(fps); fps = []; end
 if ~iscell(TSs); TSs = {TSs}; end
 nTS = length(TSs);
 if nargin < 2 || isempty(labels)  
@@ -99,13 +97,13 @@ YTicKL = cell(1,maxCh);
 
 if isempty(ops.YTickL) || length(ops.YTickL) ~= maxCh
 for nCh = 1:maxCh
-    YTicKL{nCh} = num2str(nCh);
+    YTicKL{nCh} = num2str(ticks(nCh));
 end
 else
     YTicKL = ops.YTickL;
 end
 
-if maxCh >= 30; YTicKL = []; end % dont show label when too many traces
+%if maxCh >= 30; YTicKL = []; end % dont show label when too many traces
 
 set(gca,'XGrid','off','GridLineStyle','--',...
     'FontSize',ops.fontSize,'lineWidth',1.5,'FontWeight','Bold', ...
