@@ -1,7 +1,7 @@
 % get ori- and direct maps quickly to check the responsiveness of neruons in the FOV
 
-ops.full_path = 'D:\data\GT8D_002-MC.bin'; % full path to the data
-[dataDir, fileName, ext] = fileparts(ops.full_path );
+ops.full_path = 'N:\imaging\Hieda\241127\241018AF03-FOV2\DFT_006.nd2'; % full path to the data
+[dataDir, fileName, ext] = fileparts(ops.full_path);
 if isempty(dataDir);dataDir = pwd; end
 ops.data_dir = dataDir; % full path to the folder
 ops.save_dir = fullfile(dataDir,[fileName '-DSmap']); % the dir of save folder
@@ -11,7 +11,7 @@ ops.d1 = 512; % can be empty if not known
 ops.d2 = 512;
 ops.dir_list = [0 45 90 135 180 225 270 315]; % direction list
 ops.trial_list = []; % in case if the trials are in random order
-ops.trial_num = 5; % number of trials
+ops.trial_num = 10; % number of trials
 ops.ON_OFF_frames = [75,75];
 ops.ON_idx = 76:150; % index of ON frames as the response
 ops.OFF_idx = 50:75; % index of OFF frames as the baseline activity

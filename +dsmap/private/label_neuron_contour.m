@@ -31,7 +31,7 @@ for i = 1:k
     im(pv,3) = 0;
 end
 
-im = reshape(im,512,512,3);
+im = reshape(im,d1,d2,3);
 
 if nargout
     map = im;
